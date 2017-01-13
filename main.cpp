@@ -406,7 +406,8 @@ struct Area {
 
 //======================================================================================================
 
-class TrajectoryGenerator {
+typedef vector<UPoint> Track;
+class TrackGen {
 private:
     static const DRange axisRange;
     static const DRange ksiRange;
@@ -417,16 +418,16 @@ private:
     DPoint pt;
 
 public:
-    TrajectoryGenerator(const UPoint& _dims) : pt{} {
+    TrackGen(const UPoint& _dims) : pt{} {
         assert(dims.x && dims.y);
         dims = _dims;
         step = {1.0/dims.x, 1.0/dims.y};
     }
 
-    vector<UPoint> GetLinear(double fillCfnt = 0.8) {
+    Track GetLinear(double fillCfnt = 0.8) {
         assert(0<fillCfnt && fillCfnt<1);
 
-        vector<UPoint> result;
+        Track result;
         DRange aRange = {0.5 - fillCfnt/2, 0.5 + fillCfnt/2};
         DPoint a = {aRange.Any(), aRange.Any()};
         uint alpha = angleRange.Any();
@@ -448,6 +449,19 @@ public:
         return result;
     }
 
+    Track GetVertical(uint pos) {
+        assert(pos<dims.x-1);
+        Track result(dims.y);
+        for(uint i=0; i<dims.y; ++i)
+            result[i] = {pos, i};
+        return result;
+    }
+
+    Track GetCircle(UPoint center, uint radius) {
+        assert(radius > 0);
+
+    }
+
     static void Test() {
         initscr();
         start_color();
@@ -456,7 +470,7 @@ public:
         UPoint dims;
         getmaxyx(stdscr, dims.y, dims.x);
         vector<UPoint> res;
-        TrajectoryGenerator tg(dims);
+        TrackGen tg(dims);
 
         for(uint i=0; i<100; ++i) {
             res = tg.GetLinear();
@@ -472,13 +486,13 @@ public:
         endwin();
     }
 };
-const DRange TrajectoryGenerator::axisRange = {0,1};
-const DRange TrajectoryGenerator::ksiRange = {45, 135};
-const URange TrajectoryGenerator::angleRange = {10, 170};
+const DRange TrackGen::axisRange = {0,1};
+const DRange TrackGen::ksiRange = {45, 135};
+const URange TrackGen::angleRange = {40, 140};
 
 //======================================================================================================
 
-class Chain1 {
+class Chain {
 //-------------------------fields------------------------------
 private:
     static const URange chainLengthRange;
@@ -490,7 +504,7 @@ private:
     string          symbols;
     vector<uint>    colors;
     int             position;
-    vector<UPoint>  track;
+    Track           track;
     bool            finishFlag;
     bool            movedFlag;
 
@@ -502,7 +516,10 @@ public:
 //-------------------------methods-----------------------------
 private:
 public:
-    Chain1() {}
+    Chain(Track&& _track) {
+        track = _track;
+        Init();
+    }
 
     void Init() {
         finishFlag = false;
@@ -523,13 +540,13 @@ public:
         initDelay = initDelayRange.Any();
     }
 
-    void Init(vector<UPoint>&& _track) {
+    void Init(Track&& _track) {
         track = _track;
         Init();
     }
 
-    void Track(vector<UPoint>&& _track) { track = _track; }
-    const vector<UPoint>& Track() const { return track; }
+    void SetTrack(Track&& _track) { track = _track; }
+    const Track& GetTrack() const { return track; }
 
     bool Tick() {
         if(finishFlag) return true;
@@ -573,24 +590,63 @@ public:
         UPoint dims;
         getmaxyx(stdscr, dims.y, dims.x);
 
-        TrajectoryGenerator tg(dims);
-        vector<UPoint> tr = tg.GetLinear();
-        Chain1 c1;
+        TrackGen tg(dims);
 
-        c1.Init(move(tr));
+        vector<Chain*> mx(dims.x/2);
+        for(uint i=0; i<dims.x/2; ++i)
+            mx[i] = new Chain(tg.GetVertical(i*2));
 
-        while(!c1.Tick()) {
-            c1.Display();
+        while(true) {
+
+            for(uint i=0; i<mx.size(); ++i) {
+                if(mx[i]->Tick()) mx[i]->Init();
+                mx[i]->Display();
+
+            }
             refresh();
             std::this_thread::sleep_for(std::chrono::milliseconds(2));
+            if(getch() != ERR) break;
         }
+        for(uint i=0; i<mx.size(); ++i) delete mx[i];
+        endwin();
+    }
+
+    static void LinearTest() {
+        initscr();
+        start_color();
+        curs_set(0);
+        nodelay(stdscr, true);
+        Gradient::Init();
+        UPoint dims;
+        getmaxyx(stdscr, dims.y, dims.x);
+
+        TrackGen tg(dims);
+
+        static const uint value = 100;
+
+        vector<Chain*> mx(value);
+        for(uint i=0; i<mx.size(); ++i)
+            mx[i] = new Chain(tg.GetLinear());
+
+        while(true) {
+
+            for(uint i=0; i<mx.size(); ++i) {
+                if(mx[i]->Tick()) mx[i]->Init(tg.GetLinear());
+                mx[i]->Display();
+
+            }
+            refresh();
+            std::this_thread::sleep_for(std::chrono::milliseconds(2));
+            if(getch() != ERR) break;
+        }
+        for(uint i=0; i<mx.size(); ++i) delete mx[i];
         endwin();
     }
 };
-const URange Chain1::chainLengthRange = {15, 20};
-const CRange Chain1::charsRange = {33,126};
-const URange Chain1::initDelayRange = {20,70};
-const URange Chain1::moveDelayRange = {20,70};
+const URange Chain::chainLengthRange = {20, 40};
+const CRange Chain::charsRange = {33,126};
+const URange Chain::initDelayRange = {20,70};
+const URange Chain::moveDelayRange = {20,70};
 
 //======================================================================================================
 
@@ -1099,8 +1155,9 @@ int main()
     //TimedSequence::Test();
     //Blink::Test();
     //Greeting();
-    //TrajectoryGenerator::Test();
-    Chain1::VerticalTest();
+    TrackGen::Test();
+    //Chain::VerticalTest();
+    //Chain::LinearTest();
 }
 
 
