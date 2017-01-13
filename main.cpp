@@ -11,115 +11,48 @@
 using namespace std;
 
 //======================================================================================================
-/*
-class RandomGenerator
-{
-private:
-    static const uint resolution = 1000;
-    static default_random_engine generator;
-    static uniform_int_distribution<uint> undist;
-public:
-    static uint GetRandomUnsigned(uint min, uint max) {
-        assert(min < max);
-        return undist(generator) % (max-min+1) + min;
-    }
-
-    static int GetRandomInt(int min, int max) {
-        assert(min < max);
-        return undist(generator) % (max-min+1) + min;
-    }
-
-    static double GetRandomDouble(double min, double max) {
-        assert(min < max);
-       return double(undist(generator)) * (max-min) / resolution + min;
-    }
-};
-default_random_engine RandomGenerator::generator(chrono::system_clock::now().time_since_epoch().count());
-uniform_int_distribution<uint> RandomGenerator::undist(0,resolution);
-*/
-
-/*
-template <class T>
-class RandBase {
-protected:
-    static default_random_engine gen;
-
-};
-template <class T>
-default_random_engine RandBase<T>::gen(chrono::system_clock::now().time_since_epoch().count());
 
 template <class T>
-class RandGen : RandBase<T> {
-private:
-    //static default_random_engine gen;
-public:
-    T operator()(T min, T max) {}
-};
-//template <class T>
-//default_random_engine RandGen<T>::gen(chrono::system_clock::now().time_since_epoch().count());
-
-
-template <> class RandGen<double> : RandBase<double> {
-private:
-    //static default_random_engine gen;
-    static uniform_real_distribution<double> rdb;
-public:
-    double operator()(double min, double max) {
-        assert(min<max);
-        return rdb(gen)*(max-min) + min;
-    }
-};
-//default_random_engine RandGen<double>::gen(chrono::system_clock::now().time_since_epoch().count());
-//template <class T>
-uniform_real_distribution<double> RandGen<double>::rdb;
-*/
-
-
-template <class T>
-class RandGen {
+class Rand {
 private:
     static default_random_engine gen;
 public:
-    T operator()(T min, T max) { assert(false); }
+    T operator()(T min, T max) {
+        assert(false);
+    }
 };
 template <class T>
-default_random_engine RandGen<T>::gen(chrono::system_clock::now().time_since_epoch().count());
+default_random_engine Rand<T>::gen(chrono::system_clock::now().time_since_epoch().count());
 
-template<> int RandGen<int>::operator()(int min, int max) {
+template<> int Rand<int>::operator()(int min, int max) {
     assert(min<max);
     static uniform_int_distribution<int> uid;
     return uid(gen) % (max-min+1) + min;
 }
 
-template<> uint RandGen<uint>::operator()(uint min, uint max) {
+template<> uint Rand<uint>::operator()(uint min, uint max) {
     assert(min<max);
     static uniform_int_distribution<uint> uid;
     return uid(gen) % (max-min+1) + min;
 }
 
-template<> char RandGen<char>::operator()(char min, char max) {
+template<> char Rand<char>::operator()(char min, char max) {
     assert(min<max);
     static uniform_int_distribution<char> uid;
     return uid(gen) % (max-min+1) + min;
 }
 
-template<> double RandGen<double>::operator()(double min, double max) {
+template<> double Rand<double>::operator()(double min, double max) {
     assert(min<max);
     static uniform_real_distribution<double> uid;
     return uid(gen) * (max-min) + min;
 }
 
-template<> float RandGen<float>::operator()(float min, float max) {
+template<> float Rand<float>::operator()(float min, float max) {
     assert(min<max);
     static uniform_real_distribution<float> uid;
     return uid(gen) * (max-min) + min;
 }
-
-typedef RandGen<int>    IRandGen;
-typedef RandGen<uint>   URandGen;
-typedef RandGen<char>   CRandGen;
-typedef RandGen<double> DRandGen;
-typedef RandGen<float>  FRandGen;
 
 //======================================================================================================
 
@@ -140,16 +73,16 @@ typedef Point<float>    FPoint;
 template <class T>
 struct Range {
 private:
-    static RandGen<T> rnd;
+    static Rand<T> rnd;
 public:
     T min;
     T max;
     inline bool ContainsStrict(const T val) const { return min<val && val<max; }
     inline bool Contains(const T val) const { return min<=val && val<=max; }
-    inline T GetRandom() const { return rnd(min, max); }
+    inline T Any() const { return rnd(min, max); }
 };
 template <class T>
-RandGen<T> Range<T>::rnd;
+Rand<T> Range<T>::rnd;
 
 typedef Range<int>      IRange;
 typedef Range<uint>     URange;
@@ -473,9 +406,11 @@ struct Area {
 
 //======================================================================================================
 
-class TrajectoryGenerator : RandomGenerator {
+class TrajectoryGenerator {
 private:
     static const DRange axisRange;
+    static const DRange ksiRange;
+    static const URange angleRange;
 
     UPoint dims;
     DPoint step;
@@ -489,14 +424,14 @@ public:
     }
 
     vector<UPoint> GetLinear(double fillCfnt = 0.8) {
-        static const DRange ksiRange = {45,135};
         assert(0<fillCfnt && fillCfnt<1);
 
         vector<UPoint> result;
         DRange aRange = {0.5 - fillCfnt/2, 0.5 + fillCfnt/2};
-        DPoint a = {GetRandomDouble(aRange.min, aRange.max), GetRandomDouble(aRange.min,aRange.max)};
-        uint alpha = GetRandomUnsigned(10,170);
+        DPoint a = {aRange.Any(), aRange.Any()};
+        uint alpha = angleRange.Any();
         DPoint n = {cos(alpha/180.0*M_PI), sin(alpha/180.0*M_PI)};
+        pt={0,0};
 
         if(ksiRange.Contains(alpha)) {
             for(uint i=0; i<dims.y; ++i, pt.y+=step.y) {
@@ -527,6 +462,7 @@ public:
             res = tg.GetLinear();
             for(uint j=0; j<res.size(); ++j)
                 mvaddch(res[j].y, res[j].x, '+');
+
             refresh();
             getch();
             clear();
@@ -537,25 +473,30 @@ public:
     }
 };
 const DRange TrajectoryGenerator::axisRange = {0,1};
+const DRange TrajectoryGenerator::ksiRange = {45, 135};
+const URange TrajectoryGenerator::angleRange = {10, 170};
 
 //======================================================================================================
 
-class Chain1 : RandomGenerator {
+class Chain1 {
 //-------------------------fields------------------------------
 private:
+    static const URange chainLengthRange;
+    static const CRange charsRange;
+    static const URange initDelayRange;
+    static const URange moveDelayRange;
+    static const uint   TAIL_SIZE = 10;
 
-    enum { MIN_LENGTH = 70, MAX_LENGTH = 120 }; //PERCENT
-    enum { MIN_CHAR = 33, MAX_CHAR = 126 };
-    enum { MIN_INIT_DELAY = 20, MAX_INIT_DELAY = 70 };
-    enum { MIN_MOVE_DELAY = 20, MAX_MOVE_DELAY = 70 };
-    enum { MIN_MUTATE_DELAY = 100, MAX_MUTATE_DELAY = 200 };
-    enum STATE {INIT_DELAY, MOVE, MOVE_DELAY };
-    enum { MUTATE_CFNT = 10, TAIL_SIZE = 10 };
+    string          symbols;
+    vector<uint>    colors;
+    int             position;
+    vector<UPoint>  track;
+    bool            finishFlag;
+    bool            movedFlag;
 
-    string symbols;
-    uint position;
-    vector<UPoint> trajectory;
-    Timer mainTimer;
+    Timer           mainTimer;
+    Timer           initDelay;
+    Timer           moveDelay;
 public:
 
 //-------------------------methods-----------------------------
@@ -564,12 +505,96 @@ public:
     Chain1() {}
 
     void Init() {
+        finishFlag = false;
+        position = -1;
+        symbols.resize(chainLengthRange.Any());
+        for(uint i=0; i<symbols.size(); ++i) symbols[i] = charsRange.Any();
 
+        colors.resize(symbols.size());
+        colors[0] = Gradient::white2black[0];
+        colors[1] = Gradient::green2white[Gradient::MAX_BRIGHT/2];
+        for(uint i=2; i<colors.size()-TAIL_SIZE; ++i)
+            colors[i] = Gradient::green2black[0];
+        for(uint i=colors.size()-TAIL_SIZE, j=0; i<colors.size(); ++i, j+=Gradient::MAX_BRIGHT/TAIL_SIZE)
+            colors[i] = Gradient::green2black[j];
+
+        mainTimer = symbols.size()+track.size()+1;
+        moveDelay = moveDelayRange.Any();
+        initDelay = initDelayRange.Any();
+    }
+
+    void Init(vector<UPoint>&& _track) {
+        track = _track;
+        Init();
+    }
+
+    void Track(vector<UPoint>&& _track) { track = _track; }
+    const vector<UPoint>& Track() const { return track; }
+
+    bool Tick() {
+        if(finishFlag) return true;
+        if(!initDelay.Tick()) return false;
+
+        if(!moveDelay.Tick()) return false;
+        else {
+            moveDelay.Reset();
+            ++position;
+            movedFlag = true;
+            if(mainTimer.Tick()) finishFlag=true;
+        }
+        return finishFlag;
+    }
+
+    void Display() {
+
+        if(finishFlag || !movedFlag) return;
+
+        int chainStart = max(0, int(position-track.size())+1);
+        int chainEnd = min(position, int(symbols.size())-1);
+        int trackStart = max(0, int(position-symbols.size())+1);
+        int trackEnd = min(position, int(track.size())-1);
+
+        if(trackStart>0) mvaddch(track[trackStart-1].y, track[trackStart-1].x, ' ');
+
+        for(; chainStart<=chainEnd && trackEnd>=trackStart; ++chainStart, --trackEnd) {
+            attron(COLOR_PAIR(colors[chainStart]));
+            mvaddch(track[trackEnd].y, track[trackEnd].x, symbols[chainStart]);
+            attroff(COLOR_PAIR(colors[chainStart]));
+        }
+        movedFlag = false;
+    }
+
+    static void VerticalTest() {
+        initscr();
+        start_color();
+        curs_set(0);
+        nodelay(stdscr, true);
+        Gradient::Init();
+        UPoint dims;
+        getmaxyx(stdscr, dims.y, dims.x);
+
+        TrajectoryGenerator tg(dims);
+        vector<UPoint> tr = tg.GetLinear();
+        Chain1 c1;
+
+        c1.Init(move(tr));
+
+        while(!c1.Tick()) {
+            c1.Display();
+            refresh();
+            std::this_thread::sleep_for(std::chrono::milliseconds(2));
+        }
+        endwin();
     }
 };
+const URange Chain1::chainLengthRange = {15, 20};
+const CRange Chain1::charsRange = {33,126};
+const URange Chain1::initDelayRange = {20,70};
+const URange Chain1::moveDelayRange = {20,70};
 
 //======================================================================================================
 
+/*
 class Chain : RandomGenerator {
 //-------------------------fields------------------------------
 private:
@@ -726,6 +751,7 @@ public:
     }
 };
 
+
 //======================================================================================================
 
 class Blink : RandomGenerator {
@@ -850,13 +876,9 @@ const Area Blink::centerArea{{{2,1}}, {{'X'}}};
 const Area Blink::middleArea{{{2,0},{3,1},{2,2},{1,1}},{{'X'},{'X'},{'X'},{'X'}}};
 const Area Blink::outerArea{{{3,0},{4,1},{3,2},{1,2},{0,1},{1,0}},{{'X'},{'X'},{'X'},{'X'},{'X'},{'X'}}};
 const vector<int> Blink::sequence{GetGradientSequence(Blink::GRADIENT_INTERVAL, Cavity)};
-
+*/
 
 //======================================================================================================
-
-void ChainWithBlinkTest() {
-
-}
 
 void Greeting() {
     typedef vector<bool> boolVR;
@@ -1014,6 +1036,7 @@ void Greeting() {
                      1,1,0,0,0,0,0,0,1,1,};
 
 
+    static const URange symbolRange = {'0', '1'};
     vector<int> bellSeq = GetGradientSequence(60, BellShaped);
     const uint delay = 20;
 
@@ -1025,7 +1048,7 @@ void Greeting() {
             for(uint i=0; i<width; ++i) {
                 charVR column(height);
                 for(uint j=0; j<height; ++j)
-                    column[j] = mask[k][j*width+i] ? char(RandomGenerator::GetRandomUnsigned(48,49)) : 0;
+                    column[j] = mask[k][j*width+i] ? symbolRange.Any() : 0;
                 dst.push_back(column);
             }
             if(k != mask.size()-1)
@@ -1076,9 +1099,8 @@ int main()
     //TimedSequence::Test();
     //Blink::Test();
     //Greeting();
-
-    TrajectoryGenerator::Test();
-
+    //TrajectoryGenerator::Test();
+    Chain1::VerticalTest();
 }
 
 
