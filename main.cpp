@@ -7,6 +7,8 @@
 #include <random>
 #include <cassert>
 #include <math.h>
+#include <algorithm>
+#include <iterator>
 
 using namespace std;
 
@@ -89,48 +91,6 @@ typedef Range<uint>     URange;
 typedef Range<char>     CRange;
 typedef Range<double>   DRange;
 typedef Range<float>    FRange;
-
-//======================================================================================================
-
-typedef  double (*SequenceFunc)(double);
-
-// equation - y = f(x), where x[0..1], y[0..1]
-// size => result.size()
-// minY => result.min()
-// maxY => result.max()
-vector<int> GetSequence(uint size, int minY, int maxY, SequenceFunc sf) {
-    vector<int> result(size);
-    double step = 1.0/(size-1);
-    double x = 0;
-    int scale = maxY-minY;
-    for(uint i = 0; i<size ; ++i, x+=step)
-        result[i] = round(scale * sf(x)) + minY;
-    return result;
-}
-
-double Sin(double x) { return (sin(x*2*M_PI) + 1)/2; }
-double Linear(double x) { return x; }
-double Cavity(double x) {
-    if(x<0.5) return 1-x*2;
-    else if(x>0.5) return (x-0.5)*2;
-    return 0;
-}
-double Peak(double x) {
-    if(x<0.5) return x*2;
-    else if(x>0.5) return (1-x)*2;
-    return 1;
-}
-
-double BellShaped(double x) {
-
-    const static double ln=1.0/3.0;
-    const static double x1 = 0.5 - ln/2;
-    const static double x2 = 0.5 + ln/2;
-
-    if(x<x1) return x/x1;
-    else if(x1<=x && x<=x2) return 1;
-    else return (1-x)/x1;
-}
 
 //======================================================================================================
 
@@ -306,120 +266,59 @@ short Gradient::green2white[Gradient::STEPS];
 short Gradient::white2black[Gradient::STEPS];
 
 //======================================================================================================
+
+typedef  double (*SequenceFunc)(double);
+
+// equation - y = f(x), where x[0..1], y[0..1]
+// size => result.size()
+// minY => result.min()
+// maxY => result.max()
+vector<int> GetSequence(uint size, int minY, int maxY, SequenceFunc sf) {
+    vector<int> result(size);
+    double step = 1.0/(size-1);
+    double x = 0;
+    int scale = maxY-minY;
+    for(uint i = 0; i<size ; ++i, x+=step)
+        result[i] = round(scale * sf(x)) + minY;
+    return result;
+}
+
+double Sin(double x) { return (sin(x*2*M_PI) + 1)/2; }
+double Linear(double x) { return x; }
+double Cavity(double x) {
+    if(x<0.5) return 1-x*2;
+    else if(x>0.5) return (x-0.5)*2;
+    return 0;
+}
+double Peak(double x) {
+    if(x<0.5) return x*2;
+    else if(x>0.5) return (1-x)*2;
+    return 1;
+}
+double BellShaped(double x) {
+
+    const static double ln=1.0/3.0;
+    const static double x1 = 0.5 - ln/2;
+    const static double x2 = 0.5 + ln/2;
+
+    if(x<x1) return x/x1;
+    else if(x1<=x && x<=x2) return 1;
+    else return (1-x)/x1;
+}
 vector<int> GetGradientSequence(uint size, SequenceFunc sf) {
     return GetSequence(size, 0, Gradient::MAX_BRIGHT, sf);
 }
-
-class TimedSequence : public CycleTimer {
-protected:
-    const vector<int>* sequence;
-public:
-    TimedSequence(const vector<int>* _sequence = nullptr, uint _tickOffset = 0, uint _cycleLimit = 0) :
-        CycleTimer((_sequence ? _sequence->size()-1 : 0), _tickOffset, _cycleLimit ), sequence(_sequence) { }
-
-    TimedSequence& operator=(uint value) { return *this; }
-
-    int ElemCurrent() const { return sequence->operator [](tickCurrent); }
-    const vector<int>& Sequence() const { return *sequence; }
-    void Sequence(const vector<int>& _sequance) { sequence = &_sequance; tickLimit = sequence->size()-1; }
-
-    static void Test() {
-        auto sq = GetGradientSequence(21, Cavity);
-        TimedSequence ts(&sq,0,1);
-        for(uint i=0; i<25; ++i) {
-            cout << ts.ElemCurrent() << endl;
-            ts.Tick();
-        }
-    }
-};
-
-//======================================================================================================
-
-struct Symbol {
-    char ch;
-    short clr;
-};
-
-//======================================================================================================
-
-namespace Colors {
-    enum {
-        MAX_BR = 1000,
-        START_NUM = 20,
-        STEPS = 20
-    };
-
-    short green2black[STEPS];
-    short green2white[STEPS];
-    short white2black[STEPS];
-
-    short bgClr = COLOR_BLACK;
-
-    uint brStep = MAX_BR/STEPS;
-
-    void Init() {
-        //green2black
-        for(uint i=START_NUM, j=MAX_BR, k=0; i<START_NUM+STEPS; ++i, j-=brStep, ++k) {
-            init_color(i, 0, j, 0);
-            init_pair(i, i, bgClr);
-            green2black[k] = i;
-        }
-        //green2white
-        for(uint i=START_NUM+STEPS, j=0, k=0; i<START_NUM+STEPS*2; ++i, j+=brStep, ++k) {
-            init_color(i, j, 1000, j);
-            init_pair(i, i, bgClr);
-            green2white[k] = i;
-        }
-        //white2black
-        for(uint i=START_NUM+STEPS*2, j=MAX_BR, k=0; i<START_NUM+STEPS*3; ++i, j-=brStep, ++k) {
-            init_color(i, j, j, j);
-            init_pair(i, i, bgClr);
-            white2black[k] = i;
-        }
-    }
-
-    void Test() {
-        auto coloredPrint = [](const char* str, short clr) {
-            attron(COLOR_PAIR(clr));
-            printw(str);
-            attroff(COLOR_PAIR(clr));
-        };
-
-        for(uint i=0; i<STEPS; ++i){
-            coloredPrint("###  ", green2black[i]);
-            coloredPrint("###  ", green2white[i]);
-            coloredPrint("###\n", white2black[i]);
-        }
-    }
-}
-
-//======================================================================================================
-
-struct Area {
-    vector<UPoint> points;
-    vector<char> chars;
-
-    Area() {}
-    Area(vector<UPoint> _points, vector<char> _chars) :
-        points(_points), chars(_chars) {}
-};
-
 //======================================================================================================
 
 typedef vector<UPoint> Track;
 class TrackGen {
 private:
-    static const DRange axisRange;
-    static const DRange ksiRange;
-    static const URange angleRange;
-
     UPoint dims;
     DPoint step;
-    DPoint pt;
 
 public:
-    TrackGen(const UPoint& _dims) : pt{} {
-        assert(dims.x && dims.y);
+    TrackGen(const UPoint& _dims) {
+        assert(_dims.x>0 && _dims.y>0);
         dims = _dims;
         step = {1.0/dims.x, 1.0/dims.y};
     }
@@ -427,12 +326,16 @@ public:
     Track GetLinear(double fillCfnt = 0.8) {
         assert(0<fillCfnt && fillCfnt<1);
 
+        static const DRange axisRange = {0,1};
+        static const DRange ksiRange = {45, 135};
+        static const URange angleRange = {40, 140};
+
         Track result;
         DRange aRange = {0.5 - fillCfnt/2, 0.5 + fillCfnt/2};
         DPoint a = {aRange.Any(), aRange.Any()};
         uint alpha = angleRange.Any();
         DPoint n = {cos(alpha/180.0*M_PI), sin(alpha/180.0*M_PI)};
-        pt={0,0};
+        DPoint pt={0,0};
 
         if(ksiRange.Contains(alpha)) {
             for(uint i=0; i<dims.y; ++i, pt.y+=step.y) {
@@ -457,19 +360,71 @@ public:
         return result;
     }
 
-    Track GetCircle(UPoint center, uint radius) {
-        assert(radius > 0);
+    Track GetCircle(IPoint center, int rds) {
+        assert(rds > 0);
+        static const double SIN45 = 0.7071;
+        vector<IPoint> circle;
 
+        int y = -round(rds*SIN45);
+        int yend = -y;
+        int x = 0;
+        for(;y <= yend; ++y) {
+            x = round(sqrt(rds*rds - y*y));
+            circle.push_back({x, y});
+        }
+        for(int i=circle.size()-1; i>=0; --i)
+            circle.push_back({circle[i].y, circle[i].x});
+        for(int i=circle.size()-1; i>=0; --i)
+            circle.push_back({-circle[i].y, -circle[i].x});
+
+        Track result;
+
+        uint k=0;
+        double cfnt = 0;
+        //up
+        if(center.y+rds > int(dims.y-1))        cfnt=3.0/8.0;
+        //left
+        else if(center.x < rds)                 cfnt=5.0/8.0;
+        //down
+        else if(center.y < rds)                 cfnt=7.0/8.0;
+        //right
+        else if(center.x+rds > int(dims.x-1))   cfnt=1.0/8.0;
+        k=circle.size()*cfnt;
+
+        for(uint i=0; i<circle.size(); ++i, k = (k == circle.size()-1) ? 0 : k+1) {
+            x = circle[k].x + center.x;
+            y = circle[k].y + center.y;
+            if(0<=x && x<int(dims.x) && 0<=y && y<int(dims.y))
+                result.push_back({uint(x), uint(y)});
+        }
+        return result;
     }
 
-    static void Test() {
+    Track GetArc(double fillCfnt = 0.7) {
+        assert(0<fillCfnt && fillCfnt<1);
+
+        static const double offset = 0.3;
+        static const URange ur{0,1};
+        static const DRange dr{0.5-fillCfnt/2, 0.5+fillCfnt/2};
+
+        DPoint dcenter;
+        dcenter.y = ur.Any() ? -offset : 1+offset;
+        dcenter.x = dr.Any();
+        uint rds = round((dr.Any()+offset)*dims.y);
+        IPoint icenter = {int(round(dcenter.x*dims.x)), int(round(dcenter.y*dims.y))};
+        auto res = GetCircle(icenter, rds);
+        if(ur.Any()) reverse(res.begin(), res.end());
+        return res;
+    }
+
+    static void TestLinear() {
         initscr();
         start_color();
         curs_set(0);
         Gradient::Init();
         UPoint dims;
         getmaxyx(stdscr, dims.y, dims.x);
-        vector<UPoint> res;
+        Track res;
         TrackGen tg(dims);
 
         for(uint i=0; i<100; ++i) {
@@ -485,10 +440,32 @@ public:
         getch();
         endwin();
     }
+
+    static void TestElliptic() {
+        initscr();
+        start_color();
+        curs_set(0);
+        Gradient::Init();
+        UPoint dims;
+        getmaxyx(stdscr, dims.y, dims.x);
+        Track res;
+        TrackGen tg(dims);
+
+        for(uint i=0; i<100; ++i) {
+            res = tg.GetArc();
+            for(uint j=0; j<res.size(); ++j)
+                mvaddch(res[j].y, res[j].x, '+');
+
+            refresh();
+            getch();
+            clear();
+        }
+
+        refresh();
+        getch();
+        endwin();
+    }
 };
-const DRange TrackGen::axisRange = {0,1};
-const DRange TrackGen::ksiRange = {45, 135};
-const URange TrackGen::angleRange = {40, 140};
 
 //======================================================================================================
 
@@ -622,7 +599,7 @@ public:
 
         TrackGen tg(dims);
 
-        static const uint value = 100;
+        static const uint value = 80;
 
         vector<Chain*> mx(value);
         for(uint i=0; i<mx.size(); ++i)
@@ -642,297 +619,43 @@ public:
         for(uint i=0; i<mx.size(); ++i) delete mx[i];
         endwin();
     }
-};
-const URange Chain::chainLengthRange = {20, 40};
-const CRange Chain::charsRange = {33,126};
-const URange Chain::initDelayRange = {20,70};
-const URange Chain::moveDelayRange = {20,70};
 
-//======================================================================================================
-
-/*
-class Chain : RandomGenerator {
-//-------------------------fields------------------------------
-private:
-    enum { MIN_LENGTH = 70, MAX_LENGTH = 120 }; //PERCENT
-    enum { MIN_CHAR = 33, MAX_CHAR = 126 };
-    enum { MIN_INIT_DELAY = 20, MAX_INIT_DELAY = 70 };
-    enum { MIN_MOVE_DELAY = 20, MAX_MOVE_DELAY = 70 };
-    enum { MIN_MUTATE_DELAY = 100, MAX_MUTATE_DELAY = 200 };
-    enum STATE {INIT_DELAY, MOVE, MOVE_DELAY };
-    enum { MUTATE_CFNT = 10, TAIL_SIZE = 10 };
-
-    vector<Symbol> field;
-    UPoint position;
-    UPoint dims;
-    STATE state;
-
-    Timer initDelay;
-    Timer moveDelay;
-    Timer mutateDelay;
-    Timer gradientHeadDelay;
-
-public:
-
-//------------------------methods------------------------------
-private:
-    void Init() {
-        uint size = GetRandomUnsigned(dims.y*MIN_LENGTH/100, dims.y*MAX_LENGTH/100);
-        field.resize(size);
-        for(uint i=0; i<size; ++i)
-            field[i].ch = char(GetRandomUnsigned(MIN_CHAR, MAX_CHAR));
-
-        position.y = -1;
-        initDelay = GetRandomUnsigned(MIN_INIT_DELAY, MAX_INIT_DELAY)/10*10;
-        moveDelay = GetRandomUnsigned(MIN_MOVE_DELAY, MAX_MOVE_DELAY)/10*10;
-        mutateDelay = GetRandomUnsigned(MIN_MUTATE_DELAY, MAX_MUTATE_DELAY)/10*10;
-        gradientHeadDelay = moveDelay.TickLimit()/10;
-
-        field[0].clr = Colors::white2black[Colors::STEPS-1];
-        field[1].clr = Colors::green2white[Colors::STEPS-1];
-        field[2].clr = Colors::green2white[10];
-
-
-        for(uint i=3; i<size-TAIL_SIZE; ++i) field[i].clr = Colors::green2black[0];
-        for(uint i=1; i<=TAIL_SIZE; ++i) field[size-i].clr =
-                Colors::green2black[Colors::STEPS/TAIL_SIZE*(TAIL_SIZE-i)];
-    }
-
-    void Mutate() {
-        if(state == STATE::INIT_DELAY) return;
-        if(mutateDelay.Tick()) return;
-        mutateDelay.Reset();
-
-        uint size = MUTATE_CFNT*field.size();
-        uint idx = 0;
-        for(uint i=0; i<size; ++i) {
-            idx = GetRandomUnsigned(0, field.size()-1);
-            field[idx].ch = char(GetRandomUnsigned(MIN_CHAR, MAX_CHAR));
-        }
-    }
-
-
-public:
-    Chain(UPoint _position, UPoint _dims) :
-        position(_position), dims(_dims)
-    {
-        Init();
-        state = STATE::INIT_DELAY;
-    }
-
-    const UPoint& Position() const { return position; }
-    const vector<Symbol>& Field() const { return field; }
-
-    void Tick(){
-        //Mutate();
-        switch (state) {
-        case STATE::INIT_DELAY:
-            if (initDelay.Tick()) break;
-            ++position.y;
-            state = STATE::MOVE_DELAY;
-            break;
-
-        case STATE::MOVE: {
-            ++position.y;
-
-            field[0].clr = Colors::white2black[Colors::STEPS-1];
-            field[1].clr = Colors::green2white[Colors::STEPS-1];
-            field[2].clr = Colors::green2white[10];
-
-            if(position.y < dims.y+field.size())
-                state = STATE::MOVE_DELAY;
-            else {
-                Init();
-                state = STATE::INIT_DELAY;
-            }
-            break;
-        }
-
-        case STATE::MOVE_DELAY: {
-
-            if(!gradientHeadDelay.Tick()) {
-                gradientHeadDelay.Reset();
-                field[0].clr = field[0].clr-2 > 0 ? field[0].clr-2 : 0;
-                field[1].clr -= 1;
-                field[2].clr -= 1;
-            }
-
-            if(moveDelay.Tick()) break;
-            moveDelay.Reset();
-            state = STATE::MOVE;
-            break;
-        }
-
-        default:
-            break;
-        }
-    }
-
-    void Print() {
-        for(uint i=0; i<field.size(); ++i) {
-            attron(COLOR_PAIR(field[i].clr));
-            mvaddch(position.y-i-1, position.x, ' ');
-            mvaddch(position.y-i, position.x, field[i].ch);
-            attroff(COLOR_PAIR(field[i].clr));
-        }
-    }
-
-    static void Test() {
+    static void ArcTest() {
         initscr();
         start_color();
         curs_set(0);
         nodelay(stdscr, true);
-        Colors::Init();
-        UPoint dims;
-        getmaxyx(stdscr, dims.y, dims.x);
-        vector<Chain*> vd(dims.x/2);
-
-        for(uint i=0; i<vd.size(); ++i) vd[i] = new Chain({i*2, 0}, {dims.x, dims.y});
-
-        for(uint i=0; i<10000; ++i)
-            for(auto item : vd)
-                item->Tick();
-
-        while(true) {
-            for(auto item : vd) {
-                item->Tick();
-                item->Print();
-            }
-            refresh();
-            std::this_thread::sleep_for(std::chrono::milliseconds(10));
-            if(getch() != ERR) break;
-        }
-        for(auto item : vd) delete item;
-        endwin();
-    }
-};
-
-
-//======================================================================================================
-
-class Blink : RandomGenerator {
-//----------------------------fields------------------------------
-    enum { MIN_BLINK_DELAY = 20, MAX_BLINK_DELAY = 100 };
-    enum { GRADIENT_INTERVAL = 30, GRADIENT_INTERVAL_OFFSET = 12 };
-    enum { MIDDELE_DELAY = GRADIENT_INTERVAL/5, OUTER_DELAY = GRADIENT_INTERVAL/2 };
-    enum { CENTER_OFFSET = GRADIENT_INTERVAL/2-5 };
-
-private:
-    static const Area centerArea;
-    static const Area middleArea;
-    static const Area outerArea;
-
-    static const vector<int> sequence;
-
-    TimedSequence centerGrad;
-    TimedSequence middleGrad;
-    TimedSequence outerGrad;
-
-    Timer mainTimer;
-
-    UPoint position;
-    UPoint dims;
-
-public:
-//----------------------------methods-----------------------------
-private:
-
-public:
-    Blink(UPoint _dims) :
-        centerGrad(&sequence,CENTER_OFFSET,1),
-        middleGrad(&sequence,0,1),
-        outerGrad(&sequence,0,1),
-        mainTimer(OUTER_DELAY+ GRADIENT_INTERVAL +
-                  GetRandomUnsigned(MIN_BLINK_DELAY, MAX_BLINK_DELAY)),
-        position{GetRandomUnsigned(0, _dims.x-5), GetRandomUnsigned(0, _dims.y-3)},
-        dims(_dims) { }
-
-    void Reset() {
-        position = {GetRandomUnsigned(0, dims.x-5), GetRandomUnsigned(0, dims.y-3)};
-        centerGrad.Reset(CENTER_OFFSET);
-        middleGrad.Reset();
-        outerGrad.Reset();
-        mainTimer = OUTER_DELAY+ GRADIENT_INTERVAL +
-                GetRandomUnsigned(MIN_BLINK_DELAY, MAX_BLINK_DELAY);
-    }
-
-    void Tick() {
-        if(mainTimer.Tick()) Reset();
-        centerGrad.Tick();
-        if(mainTimer.TickCurrent() >= MIDDELE_DELAY)
-            middleGrad.Tick();
-        if(mainTimer.TickCurrent() >= OUTER_DELAY)
-            outerGrad.Tick();
-    }
-
-    void Print() {
-        for(uint i=0; i<centerArea.points.size(); ++i) {
-            attron(COLOR_PAIR(Gradient::white2black[centerGrad.ElemCurrent()]));
-            mvaddch(centerArea.points[i].y+position.y, centerArea.points[i].x+position.x, centerArea.chars[i]);
-            attroff(COLOR_PAIR(Gradient::white2black[centerGrad.ElemCurrent()]));
-        }
-
-        for(uint i=0; i<middleArea.points.size(); ++i) {
-            attron(COLOR_PAIR(Gradient::white2black[middleGrad.ElemCurrent()]));
-            mvaddch(middleArea.points[i].y+position.y, middleArea.points[i].x+position.x, middleArea.chars[i]);
-            attroff(COLOR_PAIR(Gradient::white2black[middleGrad.ElemCurrent()]));
-        }
-
-        for(uint i=0; i<outerArea.points.size(); ++i) {
-            attron(COLOR_PAIR(Gradient::white2black[outerGrad.ElemCurrent()]));
-            mvaddch(outerArea.points[i].y+position.y, outerArea.points[i].x+position.x, outerArea.chars[i]);
-            attroff(COLOR_PAIR(Gradient::white2black[outerGrad.ElemCurrent()]));
-        }
-    }
-
-    static void Test() {
-        initscr();
-        start_color();
-        curs_set(0);
         Gradient::Init();
-        Colors::Init();
         UPoint dims;
         getmaxyx(stdscr, dims.y, dims.x);
-        nodelay(stdscr, true);
 
-        vector<Chain*> vd(dims.x/2);
-        for(uint i=0; i<vd.size(); ++i) vd[i] = new Chain({i*2, 0}, {dims.x, dims.y});
+        TrackGen tg(dims);
 
-        vector<Blink*> bls(dims.x/10);
-        for(auto& item: bls) item = new Blink(dims);
+        static const uint value = 40;
 
-        for(uint i=0; i<10000; ++i) {
-            for(auto& item : bls)
-                item->Tick();
-            for(auto item : vd)
-                item->Tick();
-        }
+        vector<Chain*> mx(value);
+        for(uint i=0; i<mx.size(); ++i)
+            mx[i] = new Chain(tg.GetArc());
 
         while(true) {
-            for(auto item : vd) {
-                item->Tick();
-                item->Print();
-            }
 
-            for(auto& item : bls) {
-                item->Tick();
-                item->Print();
+            for(uint i=0; i<mx.size(); ++i) {
+                if(mx[i]->Tick()) mx[i]->Init(tg.GetArc());
+                mx[i]->Display();
+
             }
             refresh();
-            std::this_thread::sleep_for(std::chrono::milliseconds(10));
+            std::this_thread::sleep_for(std::chrono::milliseconds(2));
             if(getch() != ERR) break;
         }
-
-        for(auto item : vd) delete item;
-        for(auto item:bls) delete item;
+        for(uint i=0; i<mx.size(); ++i) delete mx[i];
         endwin();
     }
 };
-const Area Blink::centerArea{{{2,1}}, {{'X'}}};
-const Area Blink::middleArea{{{2,0},{3,1},{2,2},{1,1}},{{'X'},{'X'},{'X'},{'X'}}};
-const Area Blink::outerArea{{{3,0},{4,1},{3,2},{1,2},{0,1},{1,0}},{{'X'},{'X'},{'X'},{'X'},{'X'},{'X'}}};
-const vector<int> Blink::sequence{GetGradientSequence(Blink::GRADIENT_INTERVAL, Cavity)};
-*/
+const URange Chain::chainLengthRange = {40, 60};
+const CRange Chain::charsRange = {33,126};
+const URange Chain::initDelayRange = {20,100};
+const URange Chain::moveDelayRange = {20,70};
 
 //======================================================================================================
 
@@ -1155,9 +878,13 @@ int main()
     //TimedSequence::Test();
     //Blink::Test();
     //Greeting();
-    TrackGen::Test();
+    //TrackGen::TestLinear();
+    //TrackGen::TestElliptic();
     //Chain::VerticalTest();
     //Chain::LinearTest();
+    Chain::ArcTest();
+
+
 }
 
 
